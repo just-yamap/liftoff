@@ -82,6 +82,29 @@ footer{padding:14px 24px;font-size:11px;color:var(--dim);border-top:1px solid va
       <div class="burn" data-b="9000">Ultra<small>90%</small></div>
       <div class="burn" data-b="9900">Degen<small>99%</small></div>
     </div>
+    <label>Token Card Preview <span class="sub">(how it appears on the site)</span></label>
+    <div id="cardPrev" style="border:1px solid var(--edge);border-radius:12px;background:#000;padding:12px;position:relative;overflow:hidden">
+      <div style="position:absolute;top:8px;left:8px;display:flex;gap:4px">
+        <span style="background:var(--slime);color:#000;font-size:9px;font-weight:800;border-radius:4px;padding:2px 6px">NEW</span>
+        <span id="pvBurnBadge" style="display:none;background:var(--mag);color:#fff;font-size:9px;font-weight:800;border-radius:4px;padding:2px 6px">🔥 MEGA</span>
+        <span style="background:#222;color:var(--slime);font-size:9px;font-weight:800;border-radius:4px;padding:2px 6px">⟳ REBASE</span>
+      </div>
+      <div style="display:flex;gap:12px;align-items:center;margin-top:22px">
+        <div id="pvImg" style="width:64px;height:64px;border-radius:10px;background:linear-gradient(135deg,#9dff00,#1a3300);display:flex;align-items:center;justify-content:center;font-size:30px">👾</div>
+        <div style="flex:1">
+          <div style="font-weight:800;font-size:15px" id="pvName">Rebase Monster</div>
+          <div class="mono sub"><span id="pvSym">$RMON</span><span style="color:var(--slime)">L1ft</span> · <span class="grow" id="pvRate">33%</span>/yr</div>
+          <div class="sub" style="font-size:10px;margin-top:2px">by <span class="mono" id="pvCreator">you</span> · <span id="pvTimed"></span></div>
+        </div>
+        <div style="text-align:right">
+          <div class="sub" style="font-size:9px">MCAP</div>
+          <div class="mono" style="color:var(--slime);font-size:13px" id="pvMcap">$5.6K</div>
+          <div class="sub" style="font-size:9px;margin-top:4px">🚀 <span id="pvBoost">0</span> · ❤️ <span id="pvHeart">0</span></div>
+        </div>
+      </div>
+      <div class="curvebar" style="margin-top:10px"><i id="pvFill" style="width:2%"></i></div>
+      <div class="sub" style="font-size:9px;margin-top:4px">bonding: <span id="pvGrad">0 / 85 SOL</span></div>
+    </div>
     <label>Timed Launch <span class="sub">(0 = trade instantly)</span></label>
     <input type="text" class="mono" id="delay" value="0" placeholder="hours until trading opens">
     <button class="btn" onclick="launch()">LAUNCH 🚀</button>
@@ -213,6 +236,149 @@ function render(){
   $("curveFill").style.width=Math.min(100,T.realSol/T.grad*100)+"%";
 }
 setInterval(render,100);
+
+/* ================= DEVNET MODE: real on-chain flow =================
+   DEVNET ONLY: the attestor secret key is embedded so anyone can test
+   tier attestation without our backend. NEVER ship a key like this on
+   mainnet — production attestation lives in backend/tier.ts. */
+const ATTESTOR_SECRET = new Uint8Array([73, 113, 96, 108, 192, 49, 44, 201, 123, 113, 124, 99, 74, 143, 102, 130, 92, 105, 80, 171, 95, 220, 204, 142, 220, 0, 55, 13, 249, 86, 101, 94, 82, 43, 160, 247, 81, 208, 244, 176, 196, 244, 195, 204, 184, 178, 169, 119, 57, 143, 91, 200, 70, 226, 68, 4, 186, 168, 25, 40, 152, 9, 242, 159]);
+const TOKEN22 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+const ATA_PROG = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
+const FEE_RECIPIENT = "9Z4HpvTp6hwsc66hCPnN86EGKQqNWk3mHWwJQEdbD3Cz";
+const DISC = {create:[84,52,204,228,24,140,234,75], buy:[102,6,61,18,1,218,235,234],
+              sell:[51,230,133,164,1,127,131,173], crank:[0,232,3,195,124,117,105,53]};
+let W=null, conn=null, devMint=null, devCurve=null, myAtaCache=null;
+function w3(){if(!window.solanaWeb3){log("web3.js not loaded yet — retry in 2s","err");return null}return window.solanaWeb3}
+function getConn(){const w=w3();if(!w)return null;if(!conn)conn=new w.Connection(DEVNET_RPC,"confirmed");return conn}
+function u64(n){const b=new Uint8Array(8);new DataView(b.buffer).setBigUint64(0,BigInt(Math.floor(n)),true);return b}
+function u32(n){const b=new Uint8Array(4);new DataView(b.buffer).setUint32(0,n,true);return b}
+function u16(n){const b=new Uint8Array(2);new DataView(b.buffer).setUint16(0,n,true);return b}
+function i64(n){const b=new Uint8Array(8);new DataView(b.buffer).setBigInt64(0,BigInt(Math.floor(n)),true);return b}
+function bstr(s){const e=new TextEncoder().encode(s);return cat(u32(e.length),e)}
+function cat(...a){const t=new Uint8Array(a.reduce((s,x)=>s+x.length,0));let o=0;for(const x of a){t.set(x,o);o+=x.length}return t}
+function pdas(mintPk){const w=w3();const pid=new w.PublicKey(PROGRAM_ID);
+  const [config]=w.PublicKey.findProgramAddressSync([new TextEncoder().encode("config")],pid);
+  const [curve]=w.PublicKey.findProgramAddressSync([new TextEncoder().encode("curve"),mintPk.toBytes()],pid);
+  return {config,curve};}
+function ata(owner,mint){const w=w3();
+  return w.PublicKey.findProgramAddressSync([owner.toBytes(),new w.PublicKey(TOKEN22).toBytes(),mint.toBytes()],new w.PublicKey(ATA_PROG))[0];}
+async function sendTx(ixs,extraSigners){const w=w3(),c=getConn();const tx=new w.Transaction();ixs.forEach(i=>tx.add(i));
+  tx.feePayer=wallet;tx.recentBlockhash=(await c.getLatestBlockhash()).blockhash;
+  if(extraSigners&&extraSigners.length)tx.partialSign(...extraSigners);
+  const {signature}=await window.phantom.solana.signAndSendTransaction(tx);
+  log("tx sent: "+signature.slice(0,20)+"… confirming","ok");
+  await c.confirmTransaction(signature,"confirmed");return signature;}
+
+async function devLaunch(){
+  const w=w3();if(!w)return; if(!wallet){log("connect Phantom first (set it to Devnet!)","err");return;}
+  const name=$("tName").value||"Rebase Monster", sym=(($("tSym").value||"RMON").toUpperCase());
+  const rateBps=+$("rate").value, grad=+$("grad").value, delayH=parseFloat($("delay").value)||0;
+  const mintKp=w.Keypair.generate();
+  const attestor=w.Keypair.fromSecretKey(ATTESTOR_SECRET);
+  const {config,curve}=pdas(mintKp.publicKey);
+  const curveAta=ata(curve,mintKp.publicKey);
+  const data=cat(new Uint8Array(DISC.create),bstr(name),bstr(sym+"L1ft"),bstr("https://liftoff.monster/meta/"+sym+".json"),
+    new Uint8Array([selTier]),u32(rateBps),u64(grad*1e9),i64(Date.now()/1000+delayH*3600),u16(selBurn));
+  const keys=[
+    {pubkey:wallet,isSigner:true,isWritable:true},
+    {pubkey:attestor.publicKey,isSigner:true,isWritable:false},
+    {pubkey:config,isSigner:false,isWritable:false},
+    {pubkey:mintKp.publicKey,isSigner:true,isWritable:true},
+    {pubkey:curve,isSigner:false,isWritable:true},
+    {pubkey:curveAta,isSigner:false,isWritable:true},
+    {pubkey:new w.PublicKey(TOKEN22),isSigner:false,isWritable:false},
+    {pubkey:new w.PublicKey(ATA_PROG),isSigner:false,isWritable:false},
+    {pubkey:w.SystemProgram.programId,isSigner:false,isWritable:false}];
+  try{
+    await sendTx([new w.TransactionInstruction({programId:new w.PublicKey(PROGRAM_ID),keys,data})],[mintKp,attestor]);
+    devMint=mintKp.publicKey;devCurve=curve;myAtaCache=ata(wallet,devMint);
+    log("🚀 LIVE ON DEVNET — mint: "+devMint.toBase58(),"ok");
+    log("solscan: https://solscan.io/token/"+devMint.toBase58()+"?cluster=devnet","ok");
+    $("empty").style.display="none";$("live").style.display="block";
+    $("liveTitle").textContent=`${name} · $${sym}L1ft · tier ${selTier} · DEVNET`;
+    $("balSym").textContent=sym;$("gradEcho").textContent=grad+" SOL";
+    $("rateEcho").textContent=(rateBps/100>=1000?fmt(rateBps/100,0):rateBps/100)+"%";
+    T=null; pollDev();
+  }catch(e){log("create failed: "+(e.message||e),"err");}
+}
+async function devTrade(kind){
+  const w=w3(),c=getConn(); if(!devMint){log("launch a token first","err");return;}
+  const {config,curve}=pdas(devMint);const curveAta=ata(curve,devMint);const myAta=ata(wallet,devMint);
+  let data;
+  if(kind==="buy"){const sol=Math.max(0,parseFloat($("amt").value)||0);if(!sol)return;
+    data=cat(new Uint8Array(DISC.buy),u64(sol*1e9),u64(0));}
+  else{const bal=await c.getTokenAccountBalance(myAta).catch(()=>null);
+    const raw=bal?Math.floor(+bal.value.amount*0.25):0;
+    if(!raw){log("nothing to sell","err");return;}
+    data=cat(new Uint8Array(DISC.sell),u64(raw),u64(0));}
+  const keys=[
+    {pubkey:wallet,isSigner:true,isWritable:true},
+    {pubkey:config,isSigner:false,isWritable:false},
+    {pubkey:devMint,isSigner:false,isWritable:false},
+    {pubkey:curve,isSigner:false,isWritable:true},
+    {pubkey:curveAta,isSigner:false,isWritable:true},
+    {pubkey:myAta,isSigner:false,isWritable:true},
+    {pubkey:new w.PublicKey(FEE_RECIPIENT),isSigner:false,isWritable:true},
+    {pubkey:wallet,isSigner:false,isWritable:true},
+    {pubkey:new w.PublicKey(TOKEN22),isSigner:false,isWritable:false},
+    {pubkey:new w.PublicKey(ATA_PROG),isSigner:false,isWritable:false},
+    {pubkey:w.SystemProgram.programId,isSigner:false,isWritable:false}];
+  try{await sendTx([new w.TransactionInstruction({programId:new w.PublicKey(PROGRAM_ID),keys,data})]);
+    log(kind+" confirmed on devnet","ok");pollDev();
+  }catch(e){log(kind+" failed: "+(e.message||e),"err");}
+}
+async function devCrank(){
+  const w=w3();if(!devMint)return;
+  const {curve}=pdas(devMint);
+  const data=new Uint8Array(DISC.crank);
+  const keys=[{pubkey:wallet,isSigner:true,isWritable:false},
+    {pubkey:devMint,isSigner:false,isWritable:true},
+    {pubkey:curve,isSigner:false,isWritable:true},
+    {pubkey:new w.PublicKey(TOKEN22),isSigner:false,isWritable:false}];
+  try{await sendTx([new w.TransactionInstruction({programId:new w.PublicKey(PROGRAM_ID),keys,data})]);
+    log("crank confirmed — multiplier advanced on-chain","ok");pollDev();
+  }catch(e){log("crank failed (5 min min interval): "+(e.message||e),"err");}
+}
+async function pollDev(){
+  const c=getConn();if(!devCurve)return;
+  const info=await c.getAccountInfo(devCurve);if(!info)return;
+  const d=new DataView(info.data.buffer,info.data.byteOffset);
+  let o=8+64;const tier=d.getUint8(o);o+=1;const rate=d.getUint32(o,true);o+=4;
+  const mult=d.getFloat64(o,true);o+=8;const lastCrank=Number(d.getBigInt64(o,true));o+=8;o+=8;
+  const vSol=Number(d.getBigUint64(o,true));o+=8;const vTok=Number(d.getBigUint64(o,true));o+=8;
+  const rSol=Number(d.getBigUint64(o,true));o+=8;const rTok=Number(d.getBigUint64(o,true));o+=8;
+  const complete=d.getUint8(o)===1;o+=1;const grad=Number(d.getBigUint64(o,true));
+  const bal=await c.getTokenAccountBalance(myAtaCache).catch(()=>null);
+  const raw=bal?+bal.value.amount/1e6:0;
+  $("bal").textContent=fmt(raw*mult,6);$("raw").textContent=fmt(raw,2);$("mult").textContent=fmt(mult,9);
+  $("price").textContent=(vSol/1e9/(vTok/1e6)).toExponential(3);
+  $("csol").textContent=fmt(rSol/1e9,2);
+  $("crank").textContent=Math.max(0,300-(Date.now()/1000-lastCrank)).toFixed(0)+"s";
+  $("status").textContent=complete?"GRADUATED":"CURVE · LIVE";
+  $("curveFill").style.width=Math.min(100,rSol/grad*100)+"%";
+}
+setInterval(()=>{if(mode==="devnet"&&devCurve)pollDev()},5000);
+/* route existing buttons */
+const _launch=launch,_buy=buy,_sell=sell,_crank=crankNow;
+launch=function(){mode==="devnet"?devLaunch():_launch()};
+buy=function(){mode==="devnet"?devTrade("buy"):_buy()};
+sell=function(){mode==="devnet"?devTrade("sell"):_sell()};
+crankNow=function(){mode==="devnet"?devCrank():_crank()};
+/* card preview live-binding */
+function updPrev(){
+  $("pvName").textContent=$("tName").value||"Rebase Monster";
+  $("pvSym").textContent="$"+(($("tSym").value||"RMON").toUpperCase());
+  const p=+$("rate").value/100;$("pvRate").textContent=(p>=1000?fmt(p,0):p)+"%";
+  $("pvGrad").textContent="0 / "+$("grad").value+" SOL";
+  const names={0:"",7500:"🔥 MEGA",9000:"🔥 ULTRA",9900:"🔥 DEGEN"};
+  const b=$("pvBurnBadge");if(selBurn>0){b.style.display="inline";b.textContent=names[selBurn]}else b.style.display="none";
+  const dh=parseFloat($("delay").value)||0;$("pvTimed").textContent=dh>0?("⏱ opens in "+dh+"h"):"instant launch";
+  if(wallet)$("pvCreator").textContent=wallet.toBase58().slice(0,4)+"…";
+}
+["tName","tSym","rate","grad","delay"].forEach(id=>$(id).addEventListener("input",updPrev));
+document.querySelectorAll("#burns .burn,#tiers .tier").forEach(el=>el.addEventListener("click",()=>setTimeout(updPrev,10)));
+updPrev();
 </script>
+<script src="https://unpkg.com/@solana/web3.js@1.95.3/lib/index.iife.min.js"></script>
 </body>
 </html>
