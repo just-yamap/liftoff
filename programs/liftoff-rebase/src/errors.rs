@@ -26,4 +26,10 @@ pub enum LaunchError {
     InvalidRateUpdate,
     #[msg("Unauthorized")]
     Unauthorized,
+    #[msg("Trading has not opened yet for this token (timed launch)")]
+    TradingNotOpen,
+    #[msg("Graduation threshold must be between 30 and 300 SOL")]
+    InvalidGraduationThreshold,
+    #[msg("Burn bps at migration must be <= 9900 (Degen)")]
+    InvalidBurnBps,
 }

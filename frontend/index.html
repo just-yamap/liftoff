@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Liftoff Rebase — Monster Launchpad</title>
+<style>
+:root{--bg:#0a0a0a;--card:#111;--edge:#1e1e1e;--slime:#9dff00;--slime-dim:#6aa600;--mag:#ff2d78;--txt:#e8e8e8;--dim:#8a8a8a}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh}
+.mono{font-family:ui-monospace,Consolas,monospace}
+header{display:flex;justify-content:space-between;align-items:center;padding:16px 24px;border-bottom:1px solid var(--edge)}
+h1{font-size:20px;letter-spacing:1px}h1 b{color:var(--slime)}
+.pill{border:1px solid var(--slime);color:var(--slime);border-radius:20px;padding:4px 14px;font-size:12px;cursor:pointer;background:none}
+.pill.on{background:var(--slime);color:#000;font-weight:700}
+main{display:grid;grid-template-columns:380px 1fr;gap:20px;padding:20px;max-width:1200px;margin:0 auto}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--edge);border-radius:14px;padding:20px}
+h2{font-size:14px;text-transform:uppercase;letter-spacing:2px;color:var(--slime);margin-bottom:14px}
+label{display:block;font-size:11px;color:var(--dim);margin:12px 0 4px;text-transform:uppercase;letter-spacing:1px}
+input[type=text],select{width:100%;background:#000;border:1px solid var(--edge);color:var(--txt);border-radius:8px;padding:10px;font-size:14px}
+input[type=range]{width:100%;accent-color:var(--slime)}
+.row{display:flex;gap:10px}.row>*{flex:1}
+.tiers{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:4px}
+.tier{border:1px solid var(--edge);border-radius:8px;padding:8px 4px;text-align:center;cursor:pointer;font-size:11px}
+.tier.on{border-color:var(--slime);color:var(--slime);box-shadow:0 0 12px #9dff0033}
+.tier small{display:block;color:var(--dim);font-size:9px;margin-top:2px}
+.burns{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.burn{border:1px solid var(--edge);border-radius:8px;padding:8px 4px;text-align:center;cursor:pointer;font-size:11px}
+.burn.on{border-color:var(--mag);color:var(--mag);box-shadow:0 0 12px #ff2d7833}
+.burn small{display:block;color:var(--dim);font-size:9px}
+.btn{background:var(--slime);color:#000;border:none;border-radius:8px;padding:12px;font-weight:700;font-size:14px;cursor:pointer;width:100%;margin-top:16px}
+.btn:hover{background:#b4ff33}.btn.mag{background:var(--mag);color:#fff}.btn.ghost{background:none;border:1px solid var(--edge);color:var(--txt)}
+.big-balance{font-size:40px;font-weight:800;color:var(--slime);text-shadow:0 0 24px #9dff0044;margin:8px 0}
+.big-balance .sym{font-size:18px;color:var(--dim)}
+.sub{font-size:12px;color:var(--dim)}
+.statgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:16px 0}
+.stat{background:#000;border:1px solid var(--edge);border-radius:8px;padding:10px}
+.stat .k{font-size:9px;color:var(--dim);text-transform:uppercase}.stat .v{font-size:14px;margin-top:4px}
+.curvebar{height:8px;background:#000;border:1px solid var(--edge);border-radius:6px;overflow:hidden}
+.curvebar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--slime-dim),var(--slime))}
+.trade{display:grid;grid-template-columns:1fr auto auto auto;gap:8px;margin-top:14px}
+.trade .btn{margin:0;width:auto;padding:10px 14px}
+.log{background:#000;border:1px solid var(--edge);border-radius:8px;margin-top:14px;padding:10px;height:130px;overflow-y:auto;font-size:11px}
+.log .ok{color:var(--slime)}.log .err{color:var(--mag)}
+.empty{color:var(--dim);text-align:center;padding:60px 0;font-size:14px}
+footer{padding:14px 24px;font-size:11px;color:var(--dim);border-top:1px solid var(--edge);margin-top:20px}
+.grow{color:var(--slime);font-weight:700}
+</style>
+</head>
+<body>
+<header>
+  <h1>LIFTOFF <b>REBASE</b> <span class="sub">· Monster Launchpad</span></h1>
+  <div class="row">
+    <button class="pill on" id="mSim" onclick="setMode('sim')">SIMULATE</button>
+    <button class="pill" id="mDev" onclick="setMode('devnet')">DEVNET</button>
+    <button class="pill" id="walletBtn" onclick="connectWallet()">Connect</button>
+  </div>
+</header>
+<main>
+  <!-- LAUNCH -->
+  <section class="card">
+    <h2>Launch a Rebasing Token</h2>
+    <div class="row">
+      <div><label>Name</label><input type="text" id="tName" placeholder="Rebase Monster"></div>
+      <div><label>Symbol</label><input type="text" id="tSym" placeholder="RMON" maxlength="8"></div>
+    </div>
+    <label>Monster Club Tier <span class="sub">(attested by backend)</span></label>
+    <div class="tiers" id="tiers">
+      <div class="tier on" data-t="0" data-cap="3300">Basic<small>33% cap</small></div>
+      <div class="tier" data-t="1" data-cap="100000">L1<small>1,000%</small></div>
+      <div class="tier" data-t="2" data-cap="1000000">L2<small>10,000%</small></div>
+      <div class="tier" data-t="3" data-cap="100000000">L3<small>1M% cap</small></div>
+    </div>
+    <label>Growth Rate: <span class="grow" id="rateLbl">33%</span>/yr</label>
+    <input type="range" id="rate" min="100" max="3300" value="3300" step="100">
+    <label>Bonding Threshold: <span class="grow" id="gradLbl">85 SOL</span> <span class="sub">(30–300)</span></label>
+    <input type="range" id="grad" min="30" max="300" value="85" step="5">
+    <label>Bonding Burn Action <span class="sub">(at DEX injection)</span></label>
+    <div class="burns" id="burns">
+      <div class="burn on" data-b="0">Normal<small>0% burn</small></div>
+      <div class="burn" data-b="7500">Mega<small>75%</small></div>
+      <div class="burn" data-b="9000">Ultra<small>90%</small></div>
+      <div class="burn" data-b="9900">Degen<small>99%</small></div>
+    </div>
+    <label>Timed Launch <span class="sub">(0 = trade instantly)</span></label>
+    <input type="text" class="mono" id="delay" value="0" placeholder="hours until trading opens">
+    <button class="btn" onclick="launch()">LAUNCH 🚀</button>
+    <p class="sub" style="margin-top:12px">Displayed balances grow by supply scaling (Token-2022 Scaled UI Amount) — not backed yield. Raw balances and pool math never change. Multiplier authority is held by the program, never the creator. Fees: 1% platform + 0.05% creator per trade.</p>
+  </section>
+  <!-- TOKEN -->
+  <section class="card" id="tokenCard">
+    <div class="empty" id="empty">No token launched yet.<br>Launch one on the left and watch your bag grow in real time.</div>
+    <div id="live" style="display:none">
+      <h2 id="liveTitle">TOKEN</h2>
+      <div class="big-balance"><span id="bal">0.000000</span> <span class="sym" id="balSym">RMON</span></div>
+      <div class="sub">raw <b class="mono" id="raw">0</b> × multiplier <b class="mono" id="mult">1.000000</b> · <span id="rateEcho"></span>/yr Monster Rate</div>
+      <div class="statgrid">
+        <div class="stat"><div class="k">Price (raw)</div><div class="v mono" id="price">—</div></div>
+        <div class="stat"><div class="k">Curve SOL</div><div class="v mono" id="csol">0.00</div></div>
+        <div class="stat"><div class="k">Next crank</div><div class="v mono" id="crank">—</div></div>
+        <div class="stat"><div class="k">Status</div><div class="v mono" id="status">CURVE</div></div>
+      </div>
+      <div class="curvebar"><i id="curveFill"></i></div>
+      <div class="sub" style="margin-top:6px">Graduation at <b id="gradEcho">85 SOL</b> → DEX injection <span id="burnEcho"></span></div>
+      <div class="trade">
+        <input type="text" class="mono" id="amt" placeholder="0.5" value="0.5">
+        <button class="btn" onclick="buy()">Buy SOL→</button>
+        <button class="btn mag" onclick="sell()">Sell 25%</button>
+        <button class="btn ghost" onclick="crankNow()">Crank</button>
+      </div>
+      <div class="log" id="log"></div>
+    </div>
+  </section>
+</main>
+<footer id="foot">mode: SIMULATE · program: not required · rebase tick: continuous (simulated) — on-chain the multiplier steps at each keeper crank</footer>
+<script>
+/* ============ config: post `anchor deploy` ============ */
+const DEVNET_RPC = "https://api.devnet.solana.com";
+const PROGRAM_ID = "AoVUouTT7TqwruCcseNe6BSETKkDV5mvcjaUbN83B8h6";
+/* Devnet mode intentionally refuses to fake success until the IDL ix
+   builders (create/buy/sell) are wired — see repo tests/ for the account
+   layouts. Simulate mode mirrors the exact on-chain math. */
+const V_SOL0=30, V_TOK0=1_073_000_000, YEAR=31_536_000;
+let mode="sim", wallet=null, T=null, selTier=0, selCap=3300, selBurn=0;
+const $=id=>document.getElementById(id);
+function fmt(n,d=2){return n.toLocaleString('en-US',{maximumFractionDigits:d,minimumFractionDigits:Math.min(d,2)})}
+function log(m,c){const e=document.createElement('div');e.className=c||'';e.textContent="› "+m;$("log").prepend(e)}
+
+document.querySelectorAll('#tiers .tier').forEach(el=>el.onclick=()=>{
+  document.querySelectorAll('#tiers .tier').forEach(x=>x.classList.remove('on'));
+  el.classList.add('on');selTier=+el.dataset.t;selCap=+el.dataset.cap;
+  $("rate").max=selCap;$("rate").value=Math.min(+$("rate").value,selCap);rateLbl();
+});
+document.querySelectorAll('#burns .burn').forEach(el=>el.onclick=()=>{
+  document.querySelectorAll('#burns .burn').forEach(x=>x.classList.remove('on'));
+  el.classList.add('on');selBurn=+el.dataset.b;
+});
+function rateLbl(){const p=+$("rate").value/100;$("rateLbl").textContent=(p>=1000?fmt(p,0):p)+"%"}
+$("rate").oninput=rateLbl;
+$("grad").oninput=()=>$("gradLbl").textContent=$("grad").value+" SOL";
+
+function setMode(m){mode=m;$("mSim").classList.toggle('on',m==='sim');$("mDev").classList.toggle('on',m==='devnet');
+  $("foot").textContent = m==='sim'
+   ? "mode: SIMULATE · program: not required · rebase tick: continuous (simulated) — on-chain the multiplier steps at each keeper crank"
+   : `mode: DEVNET · rpc: ${DEVNET_RPC} · program: ${PROGRAM_ID} (wire IDL builders before use)`;}
+
+async function connectWallet(){
+  const p = window.phantom?.solana;
+  if(!p){log("Phantom not found — install it or stay in Simulate mode","err");return;}
+  try{const res=await p.connect();wallet=res.publicKey;
+    $("walletBtn").textContent=wallet.toBase58().slice(0,4)+"…"+wallet.toBase58().slice(-4);
+    log("wallet connected: "+wallet.toBase58(),"ok");
+  }catch(e){log("connect rejected","err");}
+}
+
+function launch(){
+  if(mode==="devnet"){log("devnet create_token: wire the IDL/ix builder first (see repo tests/)","err");return;}
+  const name=$("tName").value||"Rebase Monster", sym=($("tSym").value||"RMON").toUpperCase();
+  const rateBps=+$("rate").value, grad=+$("grad").value, delayH=parseFloat($("delay").value)||0;
+  T={name,sym,rateBps,tier:selTier,burnBps:selBurn,grad,mult:1,createdAt:Date.now()/1000,
+     lastCrank:Date.now()/1000,openAt:Date.now()/1000+delayH*3600,
+     vSol:V_SOL0,vTok:V_TOK0,realSol:0,realTok:793_100_000,myRaw:0,complete:false};
+  $("empty").style.display="none";$("live").style.display="block";
+  $("liveTitle").textContent=`${name} · $${sym}L1ft · tier ${selTier}`;
+  $("balSym").textContent=sym;$("gradEcho").textContent=grad+" SOL";
+  $("burnEcho").textContent=selBurn>0?`· ${selBurn/100}% bonding burn 🔥`:"";
+  $("rateEcho").textContent=(rateBps/100>=1000?fmt(rateBps/100,0):rateBps/100)+"%";
+  log(`launched $${sym} — Monster Rate ${rateBps/100}%/yr (tier ${selTier} cap ok)`,"ok");
+  if(delayH>0)log(`timed launch: trading opens in ${delayH}h`,"ok");
+  render();
+}
+function tokensOut(solIn){const k=T.vSol*T.vTok;return T.vTok-k/(T.vSol+solIn);}
+function solOut(tokIn){const k=T.vSol*T.vTok;return T.vSol-k/(T.vTok+tokIn);}
+function tradeOpen(){if(Date.now()/1000<T.openAt){log(`timed launch: opens in ${((T.openAt-Date.now()/1000)/60).toFixed(1)} min`,"err");return false}return true}
+function buy(){
+  if(!T||!tradeOpen())return; if(T.complete){log("curve complete — trade on DEX","err");return;}
+  if(mode==="devnet"){log("devnet buy: wire the IDL/ix builder first","err");return;}
+  const sol=Math.max(0,parseFloat($("amt").value)||0); if(!sol)return;
+  const net=sol*0.9895; // 1% platform + 0.05% creator
+  const out=tokensOut(net);
+  if(out>T.realTok){log("not enough tokens left on curve","err");return;}
+  T.vSol+=net;T.vTok-=out;T.realSol+=net;T.realTok-=out;T.myRaw+=out;
+  log(`bought ${fmt(out,2)} raw for ${sol} SOL (fees 1.05%)`,"ok");
+  if(T.realSol>=T.grad){T.complete=true;
+    if(T.burnBps>0){const b=T.realTok*T.burnBps/10000;T.realTok-=b;log(`🔥 bonding burn: ${fmt(b,0)} raw destroyed (${T.burnBps/100}%)`,"ok");}
+    log("🎓 curve complete → migrate → DEX injection","ok");}
+  render();
+}
+function sell(){
+  if(!T||!tradeOpen())return; if(T.complete){log("curve complete — trade on DEX","err");return;}
+  const amt=T.myRaw*0.25; if(amt<=0){log("nothing to sell","err");return;}
+  const so=solOut(amt)*0.9895;
+  T.vSol-=so/0.9895;T.vTok+=amt;T.realSol-=so/0.9895;T.realTok+=amt;T.myRaw-=amt;
+  log(`sold ${fmt(amt,2)} raw for ${fmt(so,4)} SOL`,"ok");render();
+}
+function crankNow(){
+  if(!T)return;const now=Date.now()/1000;const dt=now-T.lastCrank;
+  const nm=T.mult*(1+(T.rateBps/10000)*(dt/YEAR));
+  log(`crank: multiplier ${fmt(T.mult,9)} → ${fmt(nm,9)} (Δt ${dt.toFixed(0)}s)`,"ok");
+  T.mult=nm;T.lastCrank=now;
+}
+/* live display: interpolate continuously so the number visibly ticks.
+   On-chain this steps at crank time; the vibe is the same, just smoother. */
+function render(){
+  if(!T)return;const now=Date.now()/1000;
+  const liveMult=T.mult*(1+(T.rateBps/10000)*((now-T.lastCrank)/YEAR));
+  $("bal").textContent=fmt(T.myRaw*liveMult,6);
+  $("raw").textContent=fmt(T.myRaw,2);$("mult").textContent=fmt(liveMult,9);
+  $("price").textContent=(T.vSol/T.vTok).toExponential(3);
+  $("csol").textContent=fmt(T.realSol,2);
+  $("crank").textContent=Math.max(0,300-(now-T.lastCrank)).toFixed(0)+"s";
+  $("status").textContent=T.complete?"GRADUATED":(now<T.openAt?"COUNTDOWN":"CURVE");
+  $("curveFill").style.width=Math.min(100,T.realSol/T.grad*100)+"%";
+}
+setInterval(render,100);
+</script>
+</body>
+</html>

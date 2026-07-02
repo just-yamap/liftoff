@@ -6,12 +6,15 @@ pub struct Config {
     pub attestor: Pubkey,
     pub fee_recipient: Pubkey,
     pub fee_bps: u16,
+    /// Creator fee on pre-migration trades (docs: 0.05% = 5 bps).
+    pub creator_fee_bps: u16,
+    /// Default graduation threshold (per-token value overrides).
     pub graduation_lamports: u64,
     pub bump: u8,
 }
 
 impl Config {
-    pub const LEN: usize = 8 + 32 * 3 + 2 + 8 + 1;
+    pub const LEN: usize = 8 + 32 * 3 + 2 + 2 + 8 + 1;
 }
 
 #[account]
@@ -33,9 +36,16 @@ pub struct BondingCurve {
     pub real_sol: u64,
     pub real_token: u64,
     pub complete: bool,
+    /// Per-token graduation threshold (30-300 SOL, docs: custom bonding).
+    pub graduation_lamports: u64,
+    /// Timed launch: trading disabled before this unix timestamp.
+    pub trade_open_ts: i64,
+    /// Bonding burn action: bps of leftover curve tokens burned at migration
+    /// (Normal=0, Mega=7500, Ultra=9000, Degen=9900).
+    pub burn_bps_on_migrate: u16,
     pub bump: u8,
 }
 
 impl BondingCurve {
-    pub const LEN: usize = 8 + 32 + 32 + 1 + 4 + 8 + 8 + 8 + 8 + 8 + 8 + 8 + 1 + 1;
+    pub const LEN: usize = 8 + 32 + 32 + 1 + 4 + 8 + 8 + 8 + 8 + 8 + 8 + 8 + 1 + 8 + 8 + 2 + 1;
 }

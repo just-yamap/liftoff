@@ -53,6 +53,10 @@ pub const SECONDS_PER_YEAR: f64 = 31_536_000.0;
 /// Hard ceiling so extreme rates can never produce a broken f64.
 pub const MAX_MULTIPLIER: f64 = 1e12;
 
+pub const GRADUATION_MIN: u64 = 30_000_000_000; // 30 SOL
+pub const GRADUATION_MAX: u64 = 300_000_000_000; // 300 SOL
+pub const MAX_BURN_BPS: u16 = 9_900; // Degen
+
 pub const CONFIG_SEED: &[u8] = b"config";
 pub const CURVE_SEED: &[u8] = b"curve";
 
@@ -65,6 +69,7 @@ pub mod liftoff_rebase {
         attestor: Pubkey,
         fee_recipient: Pubkey,
         fee_bps: u16,
+        creator_fee_bps: u16,
         graduation_lamports: u64,
     ) -> Result<()> {
         let config = &mut ctx.accounts.config;
@@ -72,6 +77,7 @@ pub mod liftoff_rebase {
         config.attestor = attestor;
         config.fee_recipient = fee_recipient;
         config.fee_bps = fee_bps;
+        config.creator_fee_bps = creator_fee_bps;
         config.graduation_lamports = graduation_lamports;
         config.bump = ctx.bumps.config;
         Ok(())
@@ -88,8 +94,19 @@ pub mod liftoff_rebase {
         uri: String,
         tier: u8,
         rate_bps: u32,
+        graduation_lamports: u64,
+        trade_open_ts: i64,
+        burn_bps_on_migrate: u16,
     ) -> Result<()> {
         require!(tier <= 3, LaunchError::InvalidTier);
+        require!(
+            (GRADUATION_MIN..=GRADUATION_MAX).contains(&graduation_lamports),
+            LaunchError::InvalidGraduationThreshold
+        );
+        require!(
+            burn_bps_on_migrate <= MAX_BURN_BPS,
+            LaunchError::InvalidBurnBps
+        );
         require!(
             rate_bps <= MAX_RATE_BPS_BY_TIER[tier as usize],
             LaunchError::RateExceedsTierCap
@@ -261,6 +278,9 @@ pub mod liftoff_rebase {
         bc.real_sol = 0;
         bc.real_token = CURVE_TOKENS;
         bc.complete = false;
+        bc.graduation_lamports = graduation_lamports;
+        bc.trade_open_ts = trade_open_ts;
+        bc.burn_bps_on_migrate = burn_bps_on_migrate;
         bc.bump = curve_bump;
 
         Ok(())
@@ -270,10 +290,15 @@ pub mod liftoff_rebase {
     pub fn buy(ctx: Context<Trade>, sol_in: u64, min_tokens_out: u64) -> Result<()> {
         let bc = &mut ctx.accounts.curve;
         require!(!bc.complete, LaunchError::CurveComplete);
+        let now = Clock::get()?.unix_timestamp;
+        require!(now >= bc.trade_open_ts, LaunchError::TradingNotOpen);
 
         let fee_amt = fee(sol_in, ctx.accounts.config.fee_bps)?;
+        let creator_fee_amt = fee(sol_in, ctx.accounts.config.creator_fee_bps)?;
         let net = sol_in
             .checked_sub(fee_amt)
+            .ok_or(LaunchError::MathOverflow)?
+            .checked_sub(creator_fee_amt)
             .ok_or(LaunchError::MathOverflow)?;
 
         let tokens_out = tokens_out_for_sol_in(bc.virtual_sol, bc.virtual_token, net)?;
@@ -304,6 +329,18 @@ pub mod liftoff_rebase {
                     },
                 ),
                 fee_amt,
+            )?;
+        }
+        if creator_fee_amt > 0 {
+            system_program::transfer(
+                CpiContext::new(
+                    ctx.accounts.system_program.to_account_info(),
+                    system_program::Transfer {
+                        from: ctx.accounts.trader.to_account_info(),
+                        to: ctx.accounts.creator.to_account_info(),
+                    },
+                ),
+                creator_fee_amt,
             )?;
         }
 
@@ -344,7 +381,7 @@ pub mod liftoff_rebase {
             .checked_sub(tokens_out)
             .ok_or(LaunchError::MathOverflow)?;
 
-        if bc.real_sol >= ctx.accounts.config.graduation_lamports {
+        if bc.real_sol >= bc.graduation_lamports {
             bc.complete = true;
         }
         Ok(())
@@ -354,12 +391,17 @@ pub mod liftoff_rebase {
     pub fn sell(ctx: Context<Trade>, tokens_in: u64, min_sol_out: u64) -> Result<()> {
         let bc = &ctx.accounts.curve;
         require!(!bc.complete, LaunchError::CurveComplete);
+        let now = Clock::get()?.unix_timestamp;
+        require!(now >= bc.trade_open_ts, LaunchError::TradingNotOpen);
 
         let gross = sol_out_for_tokens_in(bc.virtual_sol, bc.virtual_token, tokens_in)?;
         require!(gross <= bc.real_sol, LaunchError::InsufficientCurveSol);
         let fee_amt = fee(gross, ctx.accounts.config.fee_bps)?;
+        let creator_fee_amt = fee(gross, ctx.accounts.config.creator_fee_bps)?;
         let net = gross
             .checked_sub(fee_amt)
+            .ok_or(LaunchError::MathOverflow)?
+            .checked_sub(creator_fee_amt)
             .ok_or(LaunchError::MathOverflow)?;
         require!(net >= min_sol_out, LaunchError::SlippageExceeded);
 
@@ -395,6 +437,7 @@ pub mod liftoff_rebase {
             .fee_recipient
             .to_account_info()
             .try_borrow_mut_lamports()? += fee_amt;
+        **ctx.accounts.creator.to_account_info().try_borrow_mut_lamports()? += creator_fee_amt;
 
         let bc = &mut ctx.accounts.curve;
         bc.virtual_sol = bc
@@ -487,7 +530,32 @@ pub mod liftoff_rebase {
         // Sweep remaining tokens to the admin's ATA.
         let mint_key = bc.mint;
         let curve_seeds: &[&[u8]] = &[CURVE_SEED, mint_key.as_ref(), &[bc.bump]];
-        let remaining = ctx.accounts.curve_ata.amount;
+        let mut remaining = ctx.accounts.curve_ata.amount;
+        // Bonding burn action (Mega/Ultra/Degen): burn bps of leftovers first.
+        if bc.burn_bps_on_migrate > 0 && remaining > 0 {
+            let burn_amt = (remaining as u128 * bc.burn_bps_on_migrate as u128
+                / 10_000u128) as u64;
+            if burn_amt > 0 {
+                let ix = spl_token_2022::instruction::burn(
+                    &ctx.accounts.token_program.key(),
+                    &ctx.accounts.curve_ata.key(),
+                    &mint_key,
+                    &ctx.accounts.curve.key(),
+                    &[],
+                    burn_amt,
+                )?;
+                invoke_signed(
+                    &ix,
+                    &[
+                        ctx.accounts.curve_ata.to_account_info(),
+                        ctx.accounts.mint.to_account_info(),
+                        ctx.accounts.curve.to_account_info(),
+                    ],
+                    &[curve_seeds],
+                )?;
+                remaining -= burn_amt;
+            }
+        }
         if remaining > 0 {
             token_interface::transfer_checked(
                 CpiContext::new_with_signer(
@@ -601,6 +669,9 @@ pub struct Trade<'info> {
     /// CHECK: validated against config.
     #[account(mut, address = config.fee_recipient @ LaunchError::Unauthorized)]
     pub fee_recipient: UncheckedAccount<'info>,
+    /// CHECK: validated against the curve's creator (receives creator fees).
+    #[account(mut, address = curve.creator @ LaunchError::Unauthorized)]
+    pub creator: UncheckedAccount<'info>,
     pub token_program: Program<'info, Token2022>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
