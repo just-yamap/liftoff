@@ -6,7 +6,7 @@ pub enum LaunchError {
     MathOverflow,
     #[msg("Requested growth rate exceeds the cap for this tier")]
     RateExceedsTierCap,
-    #[msg("Invalid tier (must be 0..=3)")]
+    #[msg("Invalid tier (must be 0 or 1)")]
     InvalidTier,
     #[msg("Bonding curve already graduated; trade on the AMM")]
     CurveComplete,

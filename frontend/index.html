@@ -56,7 +56,11 @@ footer{padding:14px 24px;font-size:11px;color:var(--dim);border-top:1px solid va
     <button class="pill" id="walletBtn" onclick="connectWallet()">Connect</button>
   </div>
 </header>
-<main>
+<div style="display:flex;gap:8px;padding:14px 24px 0">
+  <button class="pill on" id="vLaunch" onclick="setView('launch')">🚀 LAUNCH</button>
+  <button class="pill" id="vBoard" onclick="setView('board')">👾 TOKEN BOARD</button>
+</div>
+<main id="viewLaunch">
   <!-- LAUNCH -->
   <section class="card">
     <h2>Launch a Rebasing Token</h2>
@@ -64,15 +68,13 @@ footer{padding:14px 24px;font-size:11px;color:var(--dim);border-top:1px solid va
       <div><label>Name</label><input type="text" id="tName" placeholder="Rebase Monster"></div>
       <div><label>Symbol</label><input type="text" id="tSym" placeholder="RMON" maxlength="8"></div>
     </div>
-    <label>Monster Club Tier <span class="sub">(attested by backend)</span></label>
-    <div class="tiers" id="tiers">
-      <div class="tier on" data-t="0" data-cap="3300">Basic<small>33% cap</small></div>
-      <div class="tier" data-t="1" data-cap="100000">L1<small>1,000%</small></div>
-      <div class="tier" data-t="2" data-cap="1000000">L2<small>10,000%</small></div>
-      <div class="tier" data-t="3" data-cap="100000000">L3<small>1M% cap</small></div>
+    <label>Mon5t3r Club NFT <span class="sub">(holding is attested by backend)</span></label>
+    <div class="tiers" id="tiers" style="grid-template-columns:1fr 1fr">
+      <div class="tier on" data-t="0" data-cap="10000">No NFT<small>max 100%/yr</small></div>
+      <div class="tier" data-t="1" data-cap="100000000">👾 Holder<small>any % (safety cap 1M%)</small></div>
     </div>
     <label>Growth Rate: <span class="grow" id="rateLbl">33%</span>/yr</label>
-    <input type="range" id="rate" min="100" max="3300" value="3300" step="100">
+    <input type="range" id="rate" min="100" max="10000" value="10000" step="100">
     <label>Bonding Threshold: <span class="grow" id="gradLbl">85 SOL</span> <span class="sub">(30–300)</span></label>
     <input type="range" id="grad" min="30" max="300" value="85" step="5">
     <label>Bonding Burn Action <span class="sub">(at DEX injection)</span></label>
@@ -135,6 +137,13 @@ footer{padding:14px 24px;font-size:11px;color:var(--dim);border-top:1px solid va
     </div>
   </section>
 </main>
+<main id="viewBoard" style="display:none;grid-template-columns:1fr">
+  <section class="card">
+    <h2>Launched Tokens <span class="sub" id="boardMode">· simulate</span></h2>
+    <div id="board" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px"></div>
+    <div class="empty" id="boardEmpty">Nothing launched yet — be the first monster.</div>
+  </section>
+</main>
 <footer id="foot">mode: SIMULATE · program: not required · rebase tick: continuous (simulated) — on-chain the multiplier steps at each keeper crank</footer>
 <script>
 /* ============ config: post `anchor deploy` ============ */
@@ -189,6 +198,7 @@ function launch(){
   $("burnEcho").textContent=selBurn>0?`· ${selBurn/100}% bonding burn 🔥`:"";
   $("rateEcho").textContent=(rateBps/100>=1000?fmt(rateBps/100,0):rateBps/100)+"%";
   log(`launched $${sym} — Monster Rate ${rateBps/100}%/yr (tier ${selTier} cap ok)`,"ok");
+  simTokens.unshift(T);
   if(delayH>0)log(`timed launch: trading opens in ${delayH}h`,"ok");
   render();
 }
@@ -364,6 +374,77 @@ launch=function(){mode==="devnet"?devLaunch():_launch()};
 buy=function(){mode==="devnet"?devTrade("buy"):_buy()};
 sell=function(){mode==="devnet"?devTrade("sell"):_sell()};
 crankNow=function(){mode==="devnet"?devCrank():_crank()};
+/* ============ TOKEN BOARD ============ */
+let simTokens=[];
+function setView(v){
+  $("viewLaunch").style.display=v==='launch'?'grid':'none';
+  $("viewBoard").style.display=v==='board'?'grid':'none';
+  $("vLaunch").classList.toggle('on',v==='launch');
+  $("vBoard").classList.toggle('on',v==='board');
+  if(v==='board')renderBoard();
+}
+function cardHTML(t){
+  const burnNames={0:"",7500:"🔥 MEGA",9000:"🔥 ULTRA",9900:"🔥 DEGEN"};
+  const pct=Math.min(100,t.realSol/t.grad*100);
+  const rate=t.rateBps/100;
+  return `<div style="border:1px solid var(--edge);border-radius:12px;background:#000;padding:12px;position:relative;cursor:pointer">
+    <div style="display:flex;gap:4px;margin-bottom:8px">
+      ${t.isNew?'<span style="background:var(--slime);color:#000;font-size:9px;font-weight:800;border-radius:4px;padding:2px 6px">NEW</span>':''}
+      ${t.burnBps>0?'<span style="background:var(--mag);color:#fff;font-size:9px;font-weight:800;border-radius:4px;padding:2px 6px">'+burnNames[t.burnBps]+'</span>':''}
+      <span style="background:#222;color:var(--slime);font-size:9px;font-weight:800;border-radius:4px;padding:2px 6px">⟳ ${rate>=1000?fmt(rate,0):rate}%/yr</span>
+      ${t.complete?'<span style="background:#333;color:#ffd700;font-size:9px;font-weight:800;border-radius:4px;padding:2px 6px">🎓 GRADUATED</span>':''}
+    </div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <div style="width:48px;height:48px;border-radius:8px;background:linear-gradient(135deg,#9dff00,#1a3300);display:flex;align-items:center;justify-content:center;font-size:24px">👾</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:800;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.name}</div>
+        <div class="mono sub" style="font-size:11px">$${t.sym}<span style="color:var(--slime)">${t.sym.endsWith('L1ft')?'':'L1ft'}</span></div>
+      </div>
+      <div style="text-align:right"><div class="sub" style="font-size:9px">CURVE SOL</div>
+      <div class="mono" style="color:var(--slime);font-size:13px">${fmt(t.realSol,2)}</div></div>
+    </div>
+    <div class="curvebar" style="margin-top:8px"><i style="width:${pct}%"></i></div>
+    <div class="sub" style="font-size:9px;margin-top:4px">bonding ${fmt(t.realSol,1)} / ${t.grad} SOL · mult ${fmt(t.mult,4)}×${t.mintStr?' · <span class=\"mono\">'+t.mintStr.slice(0,6)+'…</span>':''}</div>
+  </div>`;
+}
+function parseMintMeta(data){ /* Token-2022 TLV walk for TokenMetadata (type 19) */
+  try{const d=new DataView(data.buffer,data.byteOffset);let o=165+1; /* base+padding+accounttype */
+    while(o+4<=data.length){const t=d.getUint16(o,true),len=d.getUint16(o+2,true);
+      if(t===19){let p=o+4+64;const rd=()=>{const l=d.getUint32(p,true);p+=4;const s=new TextDecoder().decode(data.slice(p,p+l));p+=l;return s};
+        const name=rd(),sym=rd();return{name,sym};}
+      o+=4+len;}
+  }catch(e){} return null;
+}
+async function fetchDevTokens(){
+  const w=w3(),c=getConn();if(!w)return[];
+  const accs=await c.getProgramAccounts(new w.PublicKey(PROGRAM_ID),{filters:[{dataSize:153}]}).catch(e=>{log("board fetch: "+e.message,"err");return[]});
+  return Promise.all(accs.map(async ({account})=>{
+    const data=account.data;const d=new DataView(data.buffer,data.byteOffset);
+    let o=8+32;const mintPk=new w.PublicKey(data.slice(o,o+32));o+=32;
+    o+=1;const rateBps=d.getUint32(o,true);o+=4;
+    const mult=d.getFloat64(o,true);o+=8;o+=8;
+    const created=Number(d.getBigInt64(o,true));o+=8;
+    o+=16; /* virtual reserves */
+    const realSol=Number(d.getBigUint64(o,true))/1e9;o+=8;o+=8;
+    const complete=d.getUint8(o)===1;o+=1;
+    const grad=Number(d.getBigUint64(o,true))/1e9;o+=8;o+=8;
+    const burnBps=d.getUint16(o,true);
+    let name=mintPk.toBase58().slice(0,8),sym="TOKEN";
+    const mi=await c.getAccountInfo(mintPk).catch(()=>null);
+    if(mi){const m=parseMintMeta(mi.data);if(m){name=m.name;sym=m.sym.replace(/L1ft$/,"");}}
+    return {name,sym,rateBps,mult,realSol,grad,burnBps,complete,
+            isNew:(Date.now()/1000-created)<86400,mintStr:mintPk.toBase58()};
+  }));
+}
+async function renderBoard(){
+  $("boardMode").textContent="· "+(mode==="devnet"?"devnet · live on-chain":"simulate");
+  let list=[];
+  if(mode==="devnet"){list=await fetchDevTokens();}
+  else{list=simTokens.map(t=>({name:t.name,sym:t.sym,rateBps:t.rateBps,mult:t.mult*(1+(t.rateBps/10000)*((Date.now()/1000-t.lastCrank)/YEAR)),realSol:t.realSol,grad:t.grad,burnBps:t.burnBps,complete:t.complete,isNew:true}));}
+  $("board").innerHTML=list.map(cardHTML).join("");
+  $("boardEmpty").style.display=list.length?"none":"block";
+}
+setInterval(()=>{if($("viewBoard").style.display!=="none")renderBoard()},4000);
 /* card preview live-binding */
 function updPrev(){
   $("pvName").textContent=$("tName").value||"Rebase Monster";

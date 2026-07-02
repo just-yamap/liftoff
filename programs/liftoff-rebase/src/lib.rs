@@ -44,9 +44,10 @@ pub const VIRTUAL_TOKEN_0: u64 = 1_073_000_000 * 1_000_000; // 1.073B raw
 /// Tokens actually sellable on the curve; remainder migrates to the AMM.
 pub const CURVE_TOKENS: u64 = 793_100_000 * 1_000_000;
 
-/// Max growth rate (bps/year) per Monster Club tier. Tier 3 is the hard
-/// safety cap: 1,000,000% keeps the multiplier well-formed for years of cranks.
-pub const MAX_RATE_BPS_BY_TIER: [u32; 4] = [3_300, 100_000, 1_000_000, 100_000_000];
+/// Two tiers: 0 = no Mon5t3r NFT (max 100%), 1 = NFT holder (any rate up to
+/// the hard safety cap of 1,000,000%, which keeps the multiplier f64
+/// well-formed for years of cranks).
+pub const MAX_RATE_BPS_BY_TIER: [u32; 2] = [10_000, 100_000_000];
 
 pub const MIN_CRANK_INTERVAL: i64 = 300; // 5 minutes
 pub const SECONDS_PER_YEAR: f64 = 31_536_000.0;
@@ -98,7 +99,7 @@ pub mod liftoff_rebase {
         trade_open_ts: i64,
         burn_bps_on_migrate: u16,
     ) -> Result<()> {
-        require!(tier <= 3, LaunchError::InvalidTier);
+        require!(tier <= 1, LaunchError::InvalidTier);
         require!(
             (GRADUATION_MIN..=GRADUATION_MAX).contains(&graduation_lamports),
             LaunchError::InvalidGraduationThreshold
