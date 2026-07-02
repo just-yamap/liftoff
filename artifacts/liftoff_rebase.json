@@ -189,6 +189,10 @@
           "writable": true
         },
         {
+          "name": "creator",
+          "writable": true
+        },
+        {
           "name": "token_program",
           "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
         },
@@ -390,6 +394,18 @@
         {
           "name": "rate_bps",
           "type": "u32"
+        },
+        {
+          "name": "graduation_lamports",
+          "type": "u64"
+        },
+        {
+          "name": "trade_open_ts",
+          "type": "i64"
+        },
+        {
+          "name": "burn_bps_on_migrate",
+          "type": "u16"
         }
       ]
     },
@@ -446,6 +462,10 @@
         },
         {
           "name": "fee_bps",
+          "type": "u16"
+        },
+        {
+          "name": "creator_fee_bps",
           "type": "u16"
         },
         {
@@ -832,6 +852,10 @@
           "writable": true
         },
         {
+          "name": "creator",
+          "writable": true
+        },
+        {
           "name": "token_program",
           "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
         },
@@ -976,6 +1000,21 @@
       "code": 6011,
       "name": "Unauthorized",
       "msg": "Unauthorized"
+    },
+    {
+      "code": 6012,
+      "name": "TradingNotOpen",
+      "msg": "Trading has not opened yet for this token (timed launch)"
+    },
+    {
+      "code": 6013,
+      "name": "InvalidGraduationThreshold",
+      "msg": "Graduation threshold must be between 30 and 300 SOL"
+    },
+    {
+      "code": 6014,
+      "name": "InvalidBurnBps",
+      "msg": "Burn bps at migration must be <= 9900 (Degen)"
     }
   ],
   "types": [
@@ -1048,6 +1087,28 @@
             "type": "bool"
           },
           {
+            "name": "graduation_lamports",
+            "docs": [
+              "Per-token graduation threshold (30-300 SOL, docs: custom bonding)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "trade_open_ts",
+            "docs": [
+              "Timed launch: trading disabled before this unix timestamp."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "burn_bps_on_migrate",
+            "docs": [
+              "Bonding burn action: bps of leftover curve tokens burned at migration",
+              "(Normal=0, Mega=7500, Ultra=9000, Degen=9900)."
+            ],
+            "type": "u16"
+          },
+          {
             "name": "bump",
             "type": "u8"
           }
@@ -1076,7 +1137,17 @@
             "type": "u16"
           },
           {
+            "name": "creator_fee_bps",
+            "docs": [
+              "Creator fee on pre-migration trades (docs: 0.05% = 5 bps)."
+            ],
+            "type": "u16"
+          },
+          {
             "name": "graduation_lamports",
+            "docs": [
+              "Default graduation threshold (per-token value overrides)."
+            ],
             "type": "u64"
           },
           {
